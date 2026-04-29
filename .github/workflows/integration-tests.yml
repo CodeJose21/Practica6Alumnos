@@ -1,0 +1,76 @@
+name: Java CI - Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+
+      - name: Dar permisos a Maven Wrapper
+        run: chmod +x ./mvnw
+
+      - name: Compilar proyecto
+        run: ./mvnw compile --no-transfer-progress
+
+      - name: Ejecutar tests de integración
+        run: ./mvnw verify --no-transfer-progress
+
+      - name: Publicar informe de tests
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Resultados tests de integración
+          path: |
+            target/surefire-reports/*.xml
+            target/failsafe-reports/*.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Generar badge dinámico de compilación
+        uses: emibcn/badge-action@v2
+        if: always()
+        with:
+          label: build
+          status: ${{ job.status }}
+          color: ${{ job.status == 'success' && 'green' || 'red' }}
+          path: .github/badges/build.svg
+
+      - name: Generar badge de cobertura Jacoco
+        uses: cicirello/jacoco-badge-generator@v2
+        if: always()
+        with:
+          jacoco-csv-file: target/site/jacoco/jacoco.csv
+          badges-directory: .github/badges
+          generate-coverage-badge: true
+          generate-branches-badge: true
+
+      - name: Subir badges al repositorio
+        uses: EndBug/add-and-commit@v9
+        if: github.event_name == 'push'
+        with:
+          add: '.github/badges/*.svg'
+          message: 'Actualizar badges de build y cobertura'
