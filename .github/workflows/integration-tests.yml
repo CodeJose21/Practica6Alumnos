@@ -27,7 +27,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
           cache: maven
 
       - name: Dar permisos a Maven Wrapper
@@ -39,9 +39,22 @@ jobs:
       - name: Ejecutar tests de integración
         run: ./mvnw verify --no-transfer-progress
 
+      - name: Mostrar informes generados
+        if: always()
+        run: |
+          echo "Contenido de target:"
+          ls -R target || true
+          echo "Surefire reports:"
+          ls -R target/surefire-reports || true
+          echo "Failsafe reports:"
+          ls -R target/failsafe-reports || true
+          echo "JaCoCo:"
+          ls -R target/site/jacoco || true
+
       - name: Publicar informe de tests
         uses: dorny/test-reporter@v1
         if: always()
+        continue-on-error: true
         with:
           name: Resultados tests de integración
           path: |
@@ -49,6 +62,10 @@ jobs:
             target/failsafe-reports/*.xml
           reporter: java-junit
           fail-on-error: false
+
+      - name: Crear carpeta de badges
+        if: always()
+        run: mkdir -p .github/badges
 
       - name: Generar badge dinámico de compilación
         uses: emibcn/badge-action@v2
@@ -62,6 +79,7 @@ jobs:
       - name: Generar badge de cobertura Jacoco
         uses: cicirello/jacoco-badge-generator@v2
         if: always()
+        continue-on-error: true
         with:
           jacoco-csv-file: target/site/jacoco/jacoco.csv
           badges-directory: .github/badges
