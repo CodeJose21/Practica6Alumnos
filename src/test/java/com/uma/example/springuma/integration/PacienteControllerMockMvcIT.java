@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uma.example.springuma.integration.base.AbstractIntegration;
 import com.uma.example.springuma.model.Medico;
@@ -50,10 +53,13 @@ public class PacienteControllerMockMvcIT extends AbstractIntegration {
     }
 
     private Medico crearMedico(Medico medico) throws Exception {
-        String respuesta = this.mockMvc.perform(post("/medico")
+        this.mockMvc.perform(post("/medico")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(medico)))
-                .andExpect(status().isCreated())
+                .andExpect(status().isCreated());
+
+        String respuesta = this.mockMvc.perform(get("/medico/dni/" + medico.getDni()))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").exists())
                 .andReturn()
                 .getResponse()
@@ -67,36 +73,39 @@ public class PacienteControllerMockMvcIT extends AbstractIntegration {
         return medicoCreado;
     }
 
-    private Paciente crearPaciente(Paciente paciente) throws Exception {
-        String respuesta = this.mockMvc.perform(post("/paciente")
+    private Paciente crearPaciente(Paciente paciente, Medico medicoCreado) throws Exception {
+        paciente.setMedico(medicoCreado);
+
+        this.mockMvc.perform(post("/paciente")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(paciente)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").exists())
-                .andExpect(jsonPath("$.nombre").value(paciente.getNombre()))
-                .andExpect(jsonPath("$.dni").value(paciente.getDni()))
-                .andExpect(jsonPath("$.edad").value(paciente.getEdad()))
-                .andExpect(jsonPath("$.cita").value(paciente.getCita()))
+                .andExpect(status().isCreated());
+
+        String respuestaLista = this.mockMvc.perform(get("/paciente/medico/" + medicoCreado.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
-        Paciente pacienteCreado = objectMapper.readValue(respuesta, Paciente.class);
+        List<Paciente> pacientes = objectMapper.readValue(
+                respuestaLista,
+                new TypeReference<List<Paciente>>() {}
+        );
 
-        assertNotNull(pacienteCreado);
-        assertNotNull(pacienteCreado.getId());
+        assertNotNull(pacientes);
 
-        return pacienteCreado;
+        return pacientes.stream()
+                .filter(p -> paciente.getDni().equals(p.getDni()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No se encontró el paciente creado"));
     }
 
     @Test
     @DisplayName("Debe crear un paciente y recuperarlo por ID")
     void debeCrearPacienteYRecuperarloPorId() throws Exception {
         Medico medicoCreado = crearMedico(medico);
-
-        paciente.setMedico(medicoCreado);
-
-        Paciente pacienteCreado = crearPaciente(paciente);
+        Paciente pacienteCreado = crearPaciente(paciente, medicoCreado);
 
         this.mockMvc.perform(get("/paciente/" + pacienteCreado.getId()))
                 .andExpect(status().isOk())
@@ -111,10 +120,7 @@ public class PacienteControllerMockMvcIT extends AbstractIntegration {
     @DisplayName("Debe listar los pacientes de un médico")
     void debeListarPacientesDeUnMedico() throws Exception {
         Medico medicoCreado = crearMedico(medico);
-
-        paciente.setMedico(medicoCreado);
-
-        crearPaciente(paciente);
+        crearPaciente(paciente, medicoCreado);
 
         this.mockMvc.perform(get("/paciente/medico/" + medicoCreado.getId()))
                 .andExpect(status().isOk())
@@ -128,18 +134,19 @@ public class PacienteControllerMockMvcIT extends AbstractIntegration {
     @DisplayName("Debe actualizar un paciente correctamente")
     void debeActualizarPacienteCorrectamente() throws Exception {
         Medico medicoCreado = crearMedico(medico);
-
-        paciente.setMedico(medicoCreado);
-
-        Paciente pacienteCreado = crearPaciente(paciente);
+        Paciente pacienteCreado = crearPaciente(paciente, medicoCreado);
 
         pacienteCreado.setNombre("Maria Actualizada");
         pacienteCreado.setEdad(21);
         pacienteCreado.setCita("Revision");
+        pacienteCreado.setMedico(medicoCreado);
 
         this.mockMvc.perform(put("/paciente")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(pacienteCreado)))
+                .andExpect(status().isOk());
+
+        this.mockMvc.perform(get("/paciente/" + pacienteCreado.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(pacienteCreado.getId()))
                 .andExpect(jsonPath("$.nombre").value("Maria Actualizada"))
@@ -151,10 +158,7 @@ public class PacienteControllerMockMvcIT extends AbstractIntegration {
     @DisplayName("Debe eliminar un paciente correctamente")
     void debeEliminarPacienteCorrectamente() throws Exception {
         Medico medicoCreado = crearMedico(medico);
-
-        paciente.setMedico(medicoCreado);
-
-        Paciente pacienteCreado = crearPaciente(paciente);
+        Paciente pacienteCreado = crearPaciente(paciente, medicoCreado);
 
         this.mockMvc.perform(delete("/paciente/" + pacienteCreado.getId()))
                 .andExpect(status().isOk());

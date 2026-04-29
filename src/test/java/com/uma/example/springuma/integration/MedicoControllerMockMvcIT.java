@@ -41,10 +41,13 @@ public class MedicoControllerMockMvcIT extends AbstractIntegration {
     }
 
     private Medico crearMedico(Medico medico) throws Exception {
-        String respuesta = this.mockMvc.perform(post("/medico")
+        this.mockMvc.perform(post("/medico")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(medico)))
-                .andExpect(status().isCreated())
+                .andExpect(status().isCreated());
+
+        String respuesta = this.mockMvc.perform(get("/medico/dni/" + medico.getDni()))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.dni").value(medico.getDni()))
                 .andExpect(jsonPath("$.nombre").value(medico.getNombre()))
@@ -107,6 +110,9 @@ public class MedicoControllerMockMvcIT extends AbstractIntegration {
         this.mockMvc.perform(put("/medico")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(medicoCreado)))
+                .andExpect(status().isOk());
+
+        this.mockMvc.perform(get("/medico/" + medicoCreado.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(medicoCreado.getId()))
                 .andExpect(jsonPath("$.nombre").value("Miguel Actualizado"))
