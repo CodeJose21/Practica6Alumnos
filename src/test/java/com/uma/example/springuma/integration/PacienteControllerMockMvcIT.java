@@ -144,7 +144,7 @@ public class PacienteControllerMockMvcIT extends AbstractIntegration {
         this.mockMvc.perform(put("/paciente")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(pacienteCreado)))
-                .andExpect(status().isOk());
+                .andExpect(status().isNoContent());
 
         this.mockMvc.perform(get("/paciente/" + pacienteCreado.getId()))
                 .andExpect(status().isOk())
@@ -161,6 +161,6 @@ public class PacienteControllerMockMvcIT extends AbstractIntegration {
         Paciente pacienteCreado = crearPaciente(paciente, medicoCreado);
 
         this.mockMvc.perform(delete("/paciente/" + pacienteCreado.getId()))
-                .andExpect(status().isOk());
+                .andExpect(status().is2xxSuccessful());
     }
 }

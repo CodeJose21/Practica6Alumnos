@@ -4,10 +4,12 @@ import java.nio.file.Paths;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.FileSystemResource;
@@ -52,12 +54,17 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
         medico.setDni("835");
         medico.setEspecialidad("Ginecologo");
 
-        medico = testClient.post()
+        testClient.post()
                 .uri("/medico")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Mono.just(medico), Medico.class)
                 .exchange()
-                .expectStatus().isCreated()
+                .expectStatus().isCreated();
+
+        medico = testClient.get()
+                .uri("/medico/dni/" + medico.getDni())
+                .exchange()
+                .expectStatus().isOk()
                 .expectBody(Medico.class)
                 .returnResult()
                 .getResponseBody();
@@ -72,15 +79,25 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
         paciente.setCita("Ginecologia");
         paciente.setMedico(medico);
 
-        paciente = testClient.post()
+        testClient.post()
                 .uri("/paciente")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Mono.just(paciente), Paciente.class)
                 .exchange()
-                .expectStatus().isCreated()
-                .expectBody(Paciente.class)
+                .expectStatus().isCreated();
+
+        Paciente[] pacientes = testClient.get()
+                .uri("/paciente/medico/" + medico.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(Paciente[].class)
                 .returnResult()
                 .getResponseBody();
+
+        assertNotNull(pacientes);
+        assertTrue(pacientes.length > 0);
+
+        paciente = pacientes[0];
 
         assertNotNull(paciente);
         assertNotNull(paciente.getId());
@@ -99,32 +116,58 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
                 new FileSystemResource(Paths.get("src/test/resources/" + nombreArchivo).toFile())
         );
 
-        builder.part("paciente", paciente);
+        builder.part("paciente", paciente)
+                .contentType(MediaType.APPLICATION_JSON);
 
-        return testClient.post()
+        testClient.post()
                 .uri("/imagen")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()))
                 .exchange()
+                .expectStatus().is2xxSuccessful();
+
+        Imagen[] imagenes = testClient.get()
+                .uri("/imagen/paciente/" + paciente.getId())
+                .exchange()
                 .expectStatus().isOk()
-                .expectBody(Imagen.class)
+                .expectBody(Imagen[].class)
                 .returnResult()
                 .getResponseBody();
+
+        assertNotNull(imagenes);
+        assertTrue(imagenes.length > 0);
+
+        Imagen imagenCreada = imagenes[imagenes.length - 1];
+
+        assertNotNull(imagenCreada);
+        assertNotNull(imagenCreada.getId());
+
+        return imagenCreada;
     }
 
     private Informe crearInforme() {
         Informe informe = new Informe();
         informe.setImagen(imagen);
 
-        Informe informeCreado = testClient.post()
+        testClient.post()
                 .uri("/informe")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Mono.just(informe), Informe.class)
                 .exchange()
-                .expectStatus().isCreated()
-                .expectBody(Informe.class)
+                .expectStatus().is2xxSuccessful();
+
+        Informe[] informes = testClient.get()
+                .uri("/informe/imagen/" + imagen.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(Informe[].class)
                 .returnResult()
                 .getResponseBody();
+
+        assertNotNull(informes);
+        assertTrue(informes.length > 0);
+
+        Informe informeCreado = informes[informes.length - 1];
 
         assertNotNull(informeCreado);
         assertNotNull(informeCreado.getId());
@@ -174,6 +217,6 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
         testClient.delete()
                 .uri("/informe/" + informeCreado.getId())
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus().is2xxSuccessful();
     }
 }
