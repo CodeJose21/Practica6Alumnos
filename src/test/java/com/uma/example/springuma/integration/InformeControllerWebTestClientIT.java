@@ -3,17 +3,16 @@ package com.uma.example.springuma.integration;
 import java.nio.file.Paths;
 import java.time.Duration;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.test.web.reactive.server.FluxExchangeResult;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 
@@ -37,57 +36,144 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
     private Medico medico;
     private Paciente paciente;
     private Imagen imagen;
-    private Informe informe;
 
     @PostConstruct
     public void init() {
-        testClient = WebTestClient.bindToServer().baseUrl("http://localhost:" + port)
-                .responseTimeout(Duration.ofMillis(300000)).build();
+        testClient = WebTestClient.bindToServer()
+                .baseUrl("http://localhost:" + port)
+                .responseTimeout(Duration.ofMillis(300000))
+                .build();
     }
 
     @BeforeEach
     void setUp() {
-
         medico = new Medico();
         medico.setNombre("Miguel");
-        medico.setId(1L);
         medico.setDni("835");
         medico.setEspecialidad("Ginecologo");
 
+        medico = testClient.post()
+                .uri("/medico")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Mono.just(medico), Medico.class)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(Medico.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertNotNull(medico);
+        assertNotNull(medico.getId());
+
         paciente = new Paciente();
-        paciente.setId(1L);
         paciente.setNombre("Maria");
         paciente.setDni("888");
         paciente.setEdad(20);
         paciente.setCita("Ginecologia");
         paciente.setMedico(medico);
 
-        imagen = new Imagen();
-        imagen.setId(1L);
-        imagen.setPaciente(paciente);
-
-        // Crea médico
-        testClient.post().uri("/medico")
-                .body(Mono.just(medico), Medico.class)
-                .exchange()
-                .expectStatus().isCreated();
-
-        // Crea paciente
-        testClient.post().uri("/paciente")
+        paciente = testClient.post()
+                .uri("/paciente")
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(Mono.just(paciente), Paciente.class)
                 .exchange()
-                .expectStatus().isCreated();
+                .expectStatus().isCreated()
+                .expectBody(Paciente.class)
+                .returnResult()
+                .getResponseBody();
 
-        // Crea imagen
+        assertNotNull(paciente);
+        assertNotNull(paciente.getId());
+
+        imagen = subirImagen("healthy.png");
+
+        assertNotNull(imagen);
+        assertNotNull(imagen.getId());
+    }
+
+    private Imagen subirImagen(String nombreArchivo) {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
-        builder.part("image", new FileSystemResource(Paths.get("src/test/resources/healthy.png").toFile()));
+
+        builder.part(
+                "image",
+                new FileSystemResource(Paths.get("src/test/resources/" + nombreArchivo).toFile())
+        );
+
         builder.part("paciente", paciente);
 
-        testClient.post().uri("/imagen")
+        return testClient.post()
+                .uri("/imagen")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()))
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus().isOk()
+                .expectBody(Imagen.class)
+                .returnResult()
+                .getResponseBody();
+    }
 
+    private Informe crearInforme() {
+        Informe informe = new Informe();
+        informe.setImagen(imagen);
+
+        Informe informeCreado = testClient.post()
+                .uri("/informe")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Mono.just(informe), Informe.class)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(Informe.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertNotNull(informeCreado);
+        assertNotNull(informeCreado.getId());
+
+        return informeCreado;
+    }
+
+    @Test
+    @DisplayName("Debe crear un informe correctamente")
+    void debeCrearInformeCorrectamente() {
+        Informe informeCreado = crearInforme();
+
+        assertNotNull(informeCreado);
+        assertNotNull(informeCreado.getId());
+    }
+
+    @Test
+    @DisplayName("Debe obtener un informe por ID")
+    void debeObtenerInformePorId() {
+        Informe informeCreado = crearInforme();
+
+        testClient.get()
+                .uri("/informe/" + informeCreado.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(Informe.class);
+    }
+
+    @Test
+    @DisplayName("Debe listar informes de una imagen")
+    void debeListarInformesDeUnaImagen() {
+        crearInforme();
+
+        testClient.get()
+                .uri("/informe/imagen/" + imagen.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$").isArray();
+    }
+
+    @Test
+    @DisplayName("Debe eliminar un informe")
+    void debeEliminarInforme() {
+        Informe informeCreado = crearInforme();
+
+        testClient.delete()
+                .uri("/informe/" + informeCreado.getId())
+                .exchange()
+                .expectStatus().isOk();
     }
 }
